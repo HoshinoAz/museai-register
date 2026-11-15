@@ -265,3 +265,9 @@ an engine-log rerun passed all three chain cases and the final full run passed.
 The transient failure's cause was not isolated. This is a fixture/loopback
 observation, not evidence that production registrationBlocked came from the
 proxy. No proxy implementation or integration-test behavior was changed.
+
+Implementation pushed to origin/main as
+`74e7857e2d56e8a7597889e4957e2dad5b57a915`; exact remote SHA confirmed.
+GitHub Actions run `43744759300` passed all steps for that implementation,
+including Linux loopback chains and Chromium UI tests:
+https://github.com/HoshinoAz/museai-register/actions/runs/43744759300
