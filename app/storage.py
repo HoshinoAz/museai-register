@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 import os
 import sqlite3
@@ -5,6 +7,8 @@ import threading
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
+
+from .fingerprints import FingerprintFailure, create_identity, restore_identity
 
 
 class Storage:
@@ -20,7 +24,9 @@ class Storage:
                 pass
         except FileExistsError:
             pass
-        self.cipher = Fernet(key_path.read_bytes())
+        secret = key_path.read_bytes()
+        self.cipher = Fernet(secret)
+        self.identity_key = hashlib.sha256(secret + b"muse-identity-lookup-v1").digest()
         self.lock = threading.RLock()
         self.connection = sqlite3.connect(
             directory / "muse.sqlite3", check_same_thread=False
@@ -29,7 +35,41 @@ class Storage:
         self.connection.execute(
             "CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, public TEXT NOT NULL, credentials BLOB)"
         )
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS identities (account_key TEXT PRIMARY KEY, profile BLOB NOT NULL)"
+        )
         self.connection.commit()
+
+    def identity_for(self, email, language, preference="auto"):
+        account_key = hmac.new(
+            self.identity_key, email.strip().casefold().encode(), hashlib.sha256
+        ).hexdigest()
+        with self.lock, self.connection:
+            row = self.connection.execute(
+                "SELECT profile FROM identities WHERE account_key=?", (account_key,)
+            ).fetchone()
+            if row:
+                try:
+                    identity = restore_identity(json.loads(self.cipher.decrypt(row[0])))
+                except (InvalidToken, ValueError, TypeError):
+                    raise FingerprintFailure(
+                        "fingerprint_restore_failed",
+                        "本地账号指纹解密失败；未更换身份，请检查密钥和数据库",
+                    ) from None
+                if identity.language != language or preference not in (
+                    "auto",
+                    identity.tls_profile,
+                ):
+                    raise ValueError(
+                        "该邮箱已保存固定协议指纹，请沿用原语言并选择“自动分配 / 复用”；不会在重试时更换身份"
+                    )
+                return identity
+            identity = create_identity(language, preference)
+            sealed = self.cipher.encrypt(json.dumps(identity.record()).encode())
+            self.connection.execute(
+                "INSERT INTO identities VALUES (?, ?)", (account_key, sealed)
+            )
+            return identity
 
     def save(self, public, credentials=None):
         sealed = (

@@ -237,7 +237,7 @@ def client_factory(scenario="success", clients=None):
             bool(config.proxy or config.front_proxy_enabled) and config.proxy_check
         )
         client.s.close()
-        client.s = ObservedSession(FixtureSession(scenario), emit)
+        client.s = ObservedSession(FixtureSession(scenario), emit, client.identity)
         if clients is not None:
             clients.append(client)
         return client

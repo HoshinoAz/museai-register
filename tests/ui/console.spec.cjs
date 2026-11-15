@@ -41,6 +41,10 @@ test("manual OTP, persistent input, request log and credential download", async 
   const result = JSON.parse(Buffer.concat(chunks).toString());
   expect(result.hatch_access_verified).toBe(true);
   expect(result.hatch_sess).toBe("fixture-secret-cookie");
+  expect(result.protocol_fingerprint.browser).toBe("Chrome 152");
+  await expect(page.locator("#fingerprint-summary")).toContainText(
+    result.protocol_fingerprint.id.slice(0, 12),
+  );
   expect(errors).toEqual([]);
 });
 
@@ -69,6 +73,15 @@ test("batch import and filtering", async ({ page }) => {
   await page.locator("#status-filter").selectOption("attention");
   await expect(page.locator("#task-rows tr")).toHaveCount(0);
   await expect(page.locator("#empty-state")).toBeVisible();
+  const batchTasks = await page.evaluate(async () => {
+    const response = await fetch("/api/tasks", {
+      headers: { "X-Muse-Client": "1" },
+    });
+    return (await response.json()).tasks.filter((task) =>
+      task.email.startsWith("batch-"),
+    );
+  });
+  expect(new Set(batchTasks.map((task) => task.fingerprint.id)).size).toBe(2);
 });
 
 test("desktop and mobile layouts have no horizontal overflow", async ({
@@ -156,4 +169,42 @@ test("dynamic and front proxy controls submit independently", async ({
   );
   await page.locator("#front-proxy-enabled").uncheck();
   await expect(page.locator("#front-proxy")).toBeDisabled();
+});
+
+test("mailbox fingerprint persists after cancellation and rejects profile changes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator(".advanced summary").click();
+  await page.locator("#browser-profile").selectOption("chrome152_macos");
+  await page.locator("#email").fill("fingerprint-ui@example.test");
+  await fillProfile(page);
+  const firstResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/tasks") &&
+      response.request().method() === "POST",
+  );
+  await page.locator("#submit-register").click();
+  const firstTask = (await (await firstResponse).json()).tasks[0];
+  await expect(page.locator("#otp-panel")).toBeVisible();
+  await expect(page.locator("#fingerprint-summary")).toContainText(
+    "Chrome 152 / macOS",
+  );
+  await page.locator("#cancel-task").click();
+  await expect(page.locator("#progress-badge")).toHaveText("已停止");
+  await page.locator("#browser-profile").selectOption("chrome152");
+  await page.locator("#submit-register").click();
+  await expect(page.locator("#form-error")).toContainText("固定协议指纹");
+  await page.locator("#browser-profile").selectOption("auto");
+  const retryResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/tasks") &&
+      response.request().method() === "POST",
+  );
+  await page.locator("#submit-register").click();
+  const retryTask = (await (await retryResponse).json()).tasks[0];
+  expect(retryTask.fingerprint).toEqual(firstTask.fingerprint);
+  await expect(page.locator("#otp-panel")).toBeVisible();
+  await page.locator("#cancel-task").click();
+  await expect(page.locator("#progress-badge")).toHaveText("已停止");
 });

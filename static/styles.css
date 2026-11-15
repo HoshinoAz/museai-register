@@ -582,6 +582,11 @@ h2 {
 .proxy-explanation {
   margin: -6px 0 16px;
 }
+.fingerprint-summary {
+  margin: -5px 0 20px;
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+}
 .proxy-toggle {
   margin-bottom: 12px;
 }

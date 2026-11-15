@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from .fingerprints import DEFAULT_BROWSER, FingerprintFailure
 from .models import BatchInput, OtpInput, ProxyInput
 from .proxy_engine import (
     VERSION,
@@ -96,6 +97,8 @@ def create_app(data_dir=None, manager_factory=None):
             "mode": "pure_http",
             "upstream_commit": "be34c5e4893e5d109a15ffe46b14b416f60e0abf",
             "proxy_support": "dynamic_and_front",
+            "fingerprint_support": "per_account_v1",
+            "default_browser": DEFAULT_BROWSER,
             "proxy_engine": {"installed": engine_path().is_file(), "version": VERSION},
         }
 
@@ -128,6 +131,10 @@ def create_app(data_dir=None, manager_factory=None):
             return {"tasks": manager(request).create(payload.accounts)}
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
+        except FingerprintFailure as error:
+            return JSONResponse(
+                {"detail": str(error), "code": error.code}, status_code=409
+            )
 
     @application.get("/api/tasks/{task_id}")
     def get_task(task_id: str, request: Request):

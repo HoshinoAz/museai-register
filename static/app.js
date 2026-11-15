@@ -133,6 +133,7 @@ function collectAccounts() {
     date_of_birth: $("#birthday").value,
     invite_code: $("#invite-code").value.trim(),
     language: $("#language").value,
+    browser_profile: $("#browser-profile").value,
     otp_timeout: Number($("#otp-timeout").value),
     consent: $("#consent").checked,
   };
@@ -369,6 +370,12 @@ function renderDetail() {
       (task.exit_ip ? ` · 出口 IP：${task.exit_ip}` : "")
     : "任务开始后会实时显示服务端响应。";
   $("#task-note").classList.toggle("error", Boolean(task && attention(task)));
+  const fingerprint = task?.fingerprint;
+  $("#fingerprint-summary").textContent = fingerprint
+    ? `${fingerprint.browser} / ${fingerprint.platform} · ${fingerprint.language} · FP ${fingerprint.id.slice(0, 12)} · SHA ${fingerprint.sha256.slice(0, 12)}`
+    : task
+      ? "历史任务未记录独立协议指纹。"
+      : "新账号默认 Chrome 152，每个邮箱独立保存协议指纹。";
   $("#otp-hint").textContent =
     task?.otp_mode === "auto"
       ? "自动轮询中，也可手动提交"

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 from curl_cffi import requests
 
+from .fingerprints import FingerprintFailure
 from .protocol import MuseError, ProtocolClient, ProtocolFailure, select_otp
 from .proxy_engine import ProxyFailure
 
@@ -80,7 +81,15 @@ class TaskManager:
                 raise ValueError("邮箱已有进行中的任务或已创建的账号，请先查看历史结果")
             created = []
             batch_id = uuid.uuid4().hex
+            prepared = []
             for config in configs:
+                identity = self.storage.identity_for(
+                    config.email, config.language, config.browser_profile
+                )
+                prepared_config = config.model_copy()
+                prepared_config._identity = identity
+                prepared.append(prepared_config)
+            for config in prepared:
                 task_id = uuid.uuid4().hex
                 public = {
                     "id": task_id,
@@ -102,6 +111,7 @@ class TaskManager:
                     if config.proxy
                     else "direct",
                     "exit_ip": None,
+                    "fingerprint": config._identity.public(),
                     "created_at": now(),
                     "updated_at": now(),
                     "events": [],
@@ -405,7 +415,7 @@ class TaskManager:
             )
             self._emit(task, task.public["message"], "warning")
         except Exception as error:
-            if isinstance(error, (ProtocolFailure, ProxyFailure)):
+            if isinstance(error, (ProtocolFailure, ProxyFailure, FingerprintFailure)):
                 code, message = error.code, str(error)
             elif isinstance(error, MuseError):
                 code = getattr(getattr(client, "s", None), "last_error", None)
@@ -416,7 +426,11 @@ class TaskManager:
                     )
                 else:
                     code = code or "protocol_unconfirmed"
-                    message = f"服务端未确认当前步骤（{code}）；未自动重提"
+                    message = (
+                        "服务端拒绝账号创建（registrationBlocked），未披露具体原因；不能仅凭错误码归因于指纹，未自动重提"
+                        if code == "registrationBlocked"
+                        else f"服务端未确认当前步骤（{code}）；未自动重提"
+                    )
             else:
                 code = (
                     "transport_error"

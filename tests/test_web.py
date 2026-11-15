@@ -27,10 +27,15 @@ def test_api_registration_export_and_local_guard(tmp_path):
         task_id = response.json()["tasks"][0]["id"]
         result = wait_for(app.state.manager, task_id)
         assert result["verified"]
+        assert result["fingerprint"]["browser"] == "Chrome 152"
+        assert "seed" not in client.get("/api/tasks").text
         assert "fixture-secret" not in client.get("/api/tasks").text
         export = client.get(f"/api/tasks/{task_id}/credentials")
         assert export.json()["hatch_access_verified"] is True
         assert export.json()["credential_type"] == "meta_frl_and_hatch_session"
+        assert (
+            export.json()["protocol_fingerprint"]["id"] == result["fingerprint"]["id"]
+        )
         assert export.headers["cache-control"] == "no-store"
         assert (
             client.get(
@@ -135,3 +140,34 @@ def test_proxy_error_code_is_preserved(tmp_path, monkeypatch):
             response.status_code == 502
             and response.json()["code"] == "proxy_check_failed"
         )
+
+
+def test_fingerprint_restore_error_is_reported_without_new_task(tmp_path, monkeypatch):
+    from app.fingerprints import FingerprintFailure
+
+    app = app_for_test(tmp_path)
+
+    def unavailable(*args):
+        raise FingerprintFailure(
+            "fingerprint_restore_failed", "已保存的账号协议指纹无法读取"
+        )
+
+    with TestClient(app, headers={"X-Muse-Client": "1"}) as client:
+        monkeypatch.setattr(app.state.storage, "identity_for", unavailable)
+        response = client.post(
+            "/api/tasks", json={"accounts": [account().model_dump(mode="json")]}
+        )
+        assert (
+            response.status_code == 409
+            and response.json()["code"] == "fingerprint_restore_failed"
+        )
+        assert client.get("/api/tasks").json()["tasks"] == []
+
+
+def test_client_cannot_supply_identity_seed(tmp_path):
+    with TestClient(app_for_test(tmp_path), headers={"X-Muse-Client": "1"}) as client:
+        payload = account().model_dump(mode="json") | {
+            "_identity": {"seed": "private-input"}
+        }
+        response = client.post("/api/tasks", json={"accounts": [payload]})
+        assert response.status_code == 422 and "private-input" not in response.text

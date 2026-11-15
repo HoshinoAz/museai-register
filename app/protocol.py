@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .fingerprints import create_identity
 from .proxy_engine import ProxyFailure, ProxyRoute, exit_ip
 
 UPSTREAM = Path(__file__).resolve().parents[1] / "vendor" / "muse-protocol"
@@ -12,7 +13,7 @@ if not (UPSTREAM / "musepy" / "client.py").is_file():
     raise RuntimeError("缺少协议依赖，请先运行 git submodule update --init --recursive")
 sys.path.insert(0, str(UPSTREAM))
 
-from musepy.client import BASE, HEADERS_JSON, MuseClient  # noqa: E402
+from musepy.client import BASE, HEADERS_HTML, HEADERS_JSON, MuseClient  # noqa: E402
 from musepy.client import MuseError as MuseError  # noqa: E402
 from musepy.otp import select_otp as select_otp  # noqa: E402
 
@@ -32,16 +33,39 @@ def json_object(response):
 
 
 class ObservedSession:
-    def __init__(self, session, emit):
+    def __init__(self, session, emit, identity=None):
         self.inner = session
         self.emit = emit
         self.last_error = None
+        self.identity = identity
 
     def __getattr__(self, name):
         return getattr(self.inner, name)
 
     def _request(self, method, url, **kwargs):
         self.last_error = None
+        if self.identity:
+            expected = self.identity.headers()
+            headers = dict(kwargs.get("headers") or {})
+            if (
+                any(
+                    key.lower() in expected and expected[key.lower()] != value
+                    for key, value in headers.items()
+                )
+                or kwargs.get("impersonate", self.identity.tls_profile)
+                != self.identity.tls_profile
+                or kwargs.get("default_headers", False) is not False
+                or any(key in kwargs for key in ("ja3", "akamai", "extra_fp"))
+            ):
+                raise ProtocolFailure(
+                    "fingerprint_mismatch", "请求试图覆盖账号固定指纹，已在发送前停止"
+                )
+            kwargs.update(
+                headers=expected | headers,
+                impersonate=self.identity.tls_profile,
+                default_headers=False,
+                accept_encoding="gzip, deflate, br, zstd",
+            )
         response = getattr(self.inner, method.lower())(url, **kwargs)
         path = urlsplit(url).path or "/"
         self.emit(f"{method} {path} · HTTP {response.status_code}", "http")
@@ -69,23 +93,33 @@ class ProtocolClient(MuseClient):
     """Keep upstream wire behavior; add stable flow identity and explicit checks."""
 
     def __init__(self, config, emit):
+        self.identity = config._identity or create_identity(
+            config.language, config.browser_profile
+        )
+        self.identity.check_runtime()
         self.route = ProxyRoute(config, uuid.uuid4().hex, emit)
         try:
             super().__init__(
                 proxy=self.route.url or None,
-                impersonate="chrome142",
-                lang=config.language,
+                impersonate=self.identity.tls_profile,
+                lang=self.identity.language,
                 timeout=config.request_timeout,
             )
             self.s.trust_env = False
+            self.s.default_headers = False
+            self.s.headers.update(self.identity.headers())
         except Exception:
             self.route.close()
             raise
         self.proxy_check = self.route.enabled and config.proxy_check
         self.exit_address = None
         self.waterfall_id = str(uuid.uuid4())
-        self.s = ObservedSession(self.s, emit)
+        self.s = ObservedSession(self.s, emit, self.identity)
         self.completion_sent = False
+        emit(
+            f"账号协议指纹：{self.identity.profile_id[:12]} · Chrome 152 / {self.identity.platform} · UA / Client Hints / TLS 固定",
+            "info",
+        )
 
     def check_proxy(self):
         address = exit_ip(self.s, timeout=self.timeout)
@@ -104,9 +138,19 @@ class ProtocolClient(MuseClient):
 
     def _h(self, base, extra=None):
         headers = super()._h(base, extra)
+        headers.update(self.identity.headers())
+        if headers.get("sec-fetch-mode") == "navigate":
+            headers.update({"sec-fetch-user": "?1", "upgrade-insecure-requests": "1"})
         if base is HEADERS_JSON and self.csrf is None and hasattr(self, "waterfall_id"):
             headers["X-Hatch-Waterfall-Id"] = self.waterfall_id
         return headers
+
+    def open_home(self):
+        return self.s.get(
+            BASE + "/",
+            impersonate=self.fp,
+            headers=self._h(HEADERS_HTML, {"sec-fetch-site": "none"}),
+        )
 
     def _auth_headers(self):
         headers = super()._auth_headers()
@@ -233,6 +277,8 @@ class ProtocolClient(MuseClient):
         return {
             "email": email,
             "credential_type": "meta_frl_and_hatch_session",
+            "protocol_fingerprint": self.identity.public()
+            | {"headers": self.identity.headers()},
             "frl_account_id": (meta or {}).get("frl_account_id"),
             "frl_access_token": (meta or {}).get("frl_access_token"),
             "hatch_sess": self.session_cookie(),

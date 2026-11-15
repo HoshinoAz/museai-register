@@ -208,6 +208,19 @@
               </summary>
               <div class="advanced-content">
                 <label class="field"
+                  >账号协议指纹<select id="browser-profile">
+                    <option value="auto">Chrome 152 / 自动分配与复用</option>
+                    <option value="chrome152">Chrome 152 / Windows</option>
+                    <option value="chrome152_macos">
+                      Chrome 152 / macOS
+                    </option></select
+                  ><span class="help"
+                    >一邮箱一份身份，加密保存；重试、重启后复用 UA / Client
+                    Hints / TLS
+                    与语言。已有身份请沿用原语言并选择自动复用。</span
+                  ></label
+                >
+                <label class="field"
                   >注册代理模式<select id="proxy-mode">
                     <option value="fixed">固定代理 / 原样使用凭据</option>
                     <option value="dynamic">
@@ -337,6 +350,9 @@
             <div class="current-account" id="current-account">
               等待新任务<span>创建注册后，在这里跟踪每一步。</span>
             </div>
+            <p class="help fingerprint-summary" id="fingerprint-summary">
+              新账号默认 Chrome 152，每个邮箱独立保存协议指纹。
+            </p>
             <ol class="steps" id="steps"></ol>
             <div id="otp-panel" class="otp-panel" hidden>
               <label for="manual-otp">输入邮箱收到的验证码</label>

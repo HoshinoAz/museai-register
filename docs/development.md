@@ -149,3 +149,79 @@ Verification checkpoint:
 - Production health GET still returns the old capability set without
   proxy_support, confirming that a user restart is still required. Local runtime
   keys/database/engine and screenshots remain ignored; no runtime data was pushed.
+
+## Current runtime status
+
+The user explicitly requested termination of the existing service after delivery.
+Verified port 8787 belonged to PID 19348 with command line
+`D:\gpt\muse\.venv\Scripts\python.exe run.py --port 8787`, then stopped that PID.
+The stop succeeded and a subsequent listener check confirmed port 8787 is free.
+No replacement server was started. The earlier approval rejection no longer
+describes this later, explicitly authorized stop; it completed successfully.
+Run this project's start.bat when the updated backend should be started.
+
+## Per-account protocol identity and Chrome 152 update
+
+User reported register-completion `registrationBlocked` and requested one
+fingerprint per account, following RegFlow's direct GPT protocol mode. They
+then explicitly requested a newer Chrome than 142.
+
+Evidence and limits:
+
+- Sanitized local task history shows homepage 200, restart/send-otp 201,
+  confirm-otp 200, register-completion 403 with registrationBlocked. This locates
+  the refusal but does not prove its cause. No automatic creation retries added.
+- Baseline loopback wire capture proves curl's default Chrome 142 headers leaked
+  Sec-Fetch-User and Upgrade-Insecure-Requests into API requests despite cors/empty
+  metadata. This is an observable consistency issue, not proof of block causality.
+- Installed curl_cffi 0.17.0 native runtime successfully supports chrome152 and
+  chrome152_macos. Both built-in UA/Client Hints sets were inspected on loopback.
+  Chrome 152 is the newest installed preset; no claim of globally latest release.
+- Supplied successful HAR uses Firefox 152/ja-JP. No copied Firefox UA with Chrome
+  TLS, historical cookies or invented device/JS fingerprint fields were added.
+- The local identity ID and SHA256 are audit identifiers, not site-issued device
+  tokens or JA3 values. Distinct accounts may share the same browser preset.
+  Pure HTTP still does not execute Canvas/WebGL/browser JavaScript. No Muse JS
+  telemetry submission path was established. Fingerprint completeness or future
+  server acceptance is not inferred from local tests.
+
+Implementation:
+
+- `app/fingerprints.py` uses a per-email random identity seed, stable UUID and
+  digest. Immutable Chrome 152 Windows/macOS profile controls TLS preset,
+  matching reduced UA/Client Hints and language. No silent version downgrade.
+- `Storage.identity_for` stores encrypted seeds/profile/digest in a new identities
+  table with keyed mailbox lookup. Case-insensitive mailbox retries and service
+  restarts reuse it. Profile/language conflict or corrupt stored data stops before
+  starting registration; restoration never rotates identity. Existing task and
+  credential records are preserved.
+- TaskManager prepares the saved identity before queuing. Private Pydantic
+  attribute cannot be supplied by clients or appear in model_dump. Public task
+  metadata and export include safe identity summaries, never seeds.
+- ObservedSession binds every request to the selected profile and refuses
+  per-request identity overrides. default_headers=False removes implicit
+  navigation headers; navigation adds them explicitly, JSON API does not.
+  Initial homepage navigation now uses Sec-Fetch-Site:none. Request payloads,
+  dynamic TOS/disclosure, proxy/session lifecycle and single creation behavior
+  remain covered by existing fixtures. Pure HTTP and pinned upstream retained.
+- UI defaults to Chrome 152 with optional Windows/macOS preference and displays
+  account identity summary. Probe uses Chrome 152. Health exposes
+  fingerprint_support=per_account_v1 and default_browser=Chrome 152.
+
+Verification checkpoint:
+
+- 87 backend tests and 5 Edge UI tests passed. Includes real local HTTPS requests
+  with trusted test certificate for both profiles, actual UA/CH/language checks,
+  no navigation headers on API calls, native preset availability, identity
+  persistence/encryption/digest integrity, override rejection and blocked creation
+  exactly once. These checks do not establish native TLS/HTTP2 fingerprint parity.
+- Ruff, Node syntax, Git whitespace checks passed. Fixtures use temporary data
+  and no real OTP/create requests. Production observed at PID 29080 on 8787,
+  workers=1, no queued/running/waiting tasks. It still reports the old capability
+  set without fingerprint_support.
+- Attempted guarded restart after checking no active tasks. Automatic execution
+  approval rejected the combined Stop-Process/Start-Process command before it
+  executed, returning `blocked by policy` without a more specific reason. The
+  existing service remains untouched; no replacement was started. Do not retry
+  or work around this rejected action. Manual user restart is required to load
+  fingerprint_support=per_account_v1 and Chrome 152. Push remains pending.

@@ -305,7 +305,7 @@ def probe_proxy(config):
         with requests.Session(
             proxy=route.url or None,
             trust_env=False,
-            impersonate="chrome142",
+            impersonate="chrome152",
             timeout=20,
         ) as session:
             first = exit_ip(session)

@@ -50,6 +50,7 @@ python3 -m venv .venv
 - 单账号注册、最多 50 个邮箱的批量导入；批量共用表单中的姓名和生日。
 - 手动填写 OTP，或轮询独立邮箱 API；两种方式可在等待阶段并用。
 - 注册会话复用同一代理配置、Cookie jar 与 waterfall ID；支持 HTTP / HTTPS / SOCKS5、动态 IP 与独立前置代理。
+- 默认 Chrome 152，按邮箱加密保存独立协议身份；UA、Client Hints、TLS 配置与语言保持一致，重试及重启后复用。
 - 可选邀请码兑换：会话验证后，先唤醒 VM 并初始化 sharing，再提交兑换。
 - 显示任务阶段、脱敏 HTTP 状态、候补状态及失败原因；支持停止、搜索和筛选。
 - 账号凭据加密落盘，支持单账号和全部账号的 JSON 导出。
@@ -101,6 +102,16 @@ host:8000:customer-country-us-session-{session}-lifetime-30:password
 首次使用前置时，点击“安装代理链内核”。安装器从 [Mihomo 官方发行页](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.29) 下载固定 v1.19.29，并验证内置 SHA256；二进制仅保存在本项目 `data/bin/`。下载可以经过填写的前置代理，不经过注册代理。每任务启动独立内核，使用 [dialer-proxy](https://wiki.metacubex.one/en/config/proxies/dialer-proxy/) 连接两跳，只监听 localhost，随机端口和认证，结束时清理进程及临时配置。内核缺失、认证或连接失败均停止，不回退直连。
 
 “测试当前代理”只查询出口 IP 和 GET Muse 首页，不发送验证码或创建账号。批量池不会逐条测试。正式任务会重新生成自己的动态 session，因此测试出口可能与正式任务不同。默认在代理模式下，注册前与提交创建前通过 `api.ipify.org` 采样出口 IP；采样失败或不一致时不提交创建，可取消勾选此检查。两次相同只代表采样一致，不能保证全流程从未换 IP。
+
+### 一号一协议指纹
+
+在“连接与更多选项”的“账号协议指纹”中，默认 **Chrome 152 / 自动分配与复用**。首次为邮箱生成独立随机种子和身份 ID，选择当前运行库支持的 Chrome 152 Windows 或 macOS 原生 TLS / HTTP2 配置；也可以明确选择其中一种系统。已保存的邮箱固定使用原身份与语言，切换系统或语言会在发送前报错，选择自动复用可沿用原配置。批量邮箱各有独立身份，历史任务不会被改写或自动重提。
+
+种子和配置加密存入本项目数据库，恢复时检查配置摘要；损坏、密钥不匹配或运行库不支持时停止，不更换种子或降级到 Chrome 142。页面、日志和凭据导出包含 ID、浏览器、系统和 SHA256 摘要，公开 API 不包含种子。身份 ID 是本地关联标识，不是网站签发或接受的设备凭证；不同邮箱可以使用相同浏览器型号，不能据此宣称每个账号具有独一无二的 JA3。
+
+每次请求固定匹配的 `User-Agent`、`Sec-CH-UA`、系统、移动标记及 `Accept-Language`，禁止单个请求覆盖。按 [curl_cffi 官方说明](https://curl-cffi.readthedocs.io/en/latest/quick_start.html#headers) 关闭默认头并显式区分导航与 API：`Sec-Fetch-User` 和 `Upgrade-Insecure-Requests` 只出现在导航中，JSON 请求不再混入它们。运行库仍负责对应的 TLS / HTTP2 模拟，而非仅改 UA 字符串。
+
+本功能覆盖协议层可发送的身份字段。纯 HTTP 不执行 Canvas、WebGL、AudioContext 或浏览器 JS；当前证据未确定 Muse 用于这些字段的提交入口，因此未伪造额外 Cookie 或指纹参数。`registrationBlocked` 只说明创建接口拒绝请求，不能单凭错误码确定是指纹、IP、邮箱或其他服务端条件，也不保证升级浏览器后解除拒绝。
 
 ## 完成条件与中断
 
@@ -163,6 +174,6 @@ npm run test:ui
 
 真实代理链测试需要先安装内核；没有内核时三项本地两跳测试会跳过，其他 fixture 测试照常运行。GitHub Actions 安装内核后验证 loopback 链路，不连接实际注册目标。
 
-已验证：64 项后端测试、4 项网页测试，以及展开代理配置后的桌面 / 手机布局。使用真实 Mihomo 和本地认证代理验证 HTTP → SOCKS5、SOCKS5 → HTTP、认证失败不直连及资源清理。另通过本机前置代理完成两次出口采样与只读 Muse 首页 HTTP 200。**尚未使用新邮箱验证真实端到端注册成功**；本地测试不能替代服务端最终接受的证据。
+已验证：87 项后端测试、5 项网页测试，以及展开代理配置后的桌面 / 手机布局。使用真实 Mihomo 和本地认证代理验证 HTTP → SOCKS5、SOCKS5 → HTTP、认证失败不直连及资源清理。Chrome 152 Windows / macOS 经本地受信证书的 HTTPS 服务验证实际请求头；身份持久化、加密、覆盖保护和单次创建行为均有回归检查。另通过本机前置代理完成两次出口采样与只读 Muse 首页 HTTP 200。**尚未使用新邮箱验证真实端到端注册成功**；本地测试不能替代服务端最终接受的证据。
 
 开发检查点和 HAR 协议差异见 [docs/development.md](docs/development.md)。

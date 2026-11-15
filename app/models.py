@@ -3,7 +3,16 @@ from datetime import date
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
+
+from .fingerprints import BrowserIdentity
 
 from .proxies import parse_proxy
 
@@ -31,6 +40,8 @@ class ProxyInput(BaseModel):
 
 
 class AccountInput(ProxyInput):
+    _identity: BrowserIdentity | None = PrivateAttr(default=None)
+
     email: str = Field(min_length=3, max_length=254)
     first_name: str = Field(min_length=1, max_length=80)
     last_name: str = Field(min_length=1, max_length=80)
@@ -38,6 +49,7 @@ class AccountInput(ProxyInput):
     otp_url: str = Field(default="", max_length=2048)
     invite_code: str = Field(default="", max_length=100)
     language: str = Field(default="ja", pattern=r"^(ja|en-US|zh-CN)$")
+    browser_profile: Literal["auto", "chrome152", "chrome152_macos"] = "auto"
     otp_timeout: int = Field(default=180, ge=30, le=600)
     request_timeout: int = Field(default=30, ge=5, le=60)
     consent: bool
