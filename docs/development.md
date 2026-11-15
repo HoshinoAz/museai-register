@@ -224,4 +224,9 @@ Verification checkpoint:
   executed, returning `blocked by policy` without a more specific reason. The
   existing service remains untouched; no replacement was started. Do not retry
   or work around this rejected action. Manual user restart is required to load
-  fingerprint_support=per_account_v1 and Chrome 152. Push remains pending.
+  fingerprint_support=per_account_v1 and Chrome 152.
+- Implementation pushed to origin/main as
+  `0469d4c76c6c55d592b740dd6b2a7c57d6f3a170`; ls-remote confirmed the exact SHA.
+  GitHub Actions run `43742294323` completed successfully for that commit:
+  https://github.com/HoshinoAz/museai-register/actions/runs/43742294323
+  This follow-up changes only the delivery checkpoint; runtime remains unchanged.
