@@ -1,0 +1,25 @@
+name: Test standalone console
+on: [push, pull_request]
+
+jobs:
+  isolated-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -r requirements-dev.txt
+      - run: .venv/bin/python -m pytest tests -q
+      - run: .venv/bin/ruff check app tests run.py
+      - run: node --check static/app.js
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui

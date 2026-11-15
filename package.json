@@ -1,0 +1,12 @@
+{
+  "name": "muse-register-ui-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Optional browser tests; runtime frontend is static and needs no Node.js",
+  "scripts": {
+    "test:ui": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}

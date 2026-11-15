@@ -1,0 +1,4 @@
+curl_cffi>=0.17.0,<0.18
+fastapi>=0.115,<1
+uvicorn>=0.34,<1
+cryptography>=44,<48
