@@ -141,4 +141,11 @@ Verification checkpoint:
   retry or work around that rejected process action. A normal user restart of
   start.bat is needed to load the new backend. Isolated fixture service only
   was launched for UI tests.
-- Implementation and final local validation complete; push is the remaining step.
+- Implementation pushed to origin/main as
+  `41ecdfcc08e2ba2f67a22b408851a2bf851495bc`; ls-remote confirmed the exact SHA.
+  GitHub Actions run `43740127921` completed successfully on Linux, including
+  pinned engine installation, loopback chain tests and Chromium UI tests:
+  https://github.com/HoshinoAz/museai-register/actions/runs/43740127921
+- Production health GET still returns the old capability set without
+  proxy_support, confirming that a user restart is still required. Local runtime
+  keys/database/engine and screenshots remain ignored; no runtime data was pushed.
