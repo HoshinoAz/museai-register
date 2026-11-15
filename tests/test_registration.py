@@ -255,3 +255,53 @@ def test_otp_freshness_and_ambiguity():
     assert (
         select_otp([{"otp": "123456", "time": "2026-11-16T00:00:00"}], boundary) is None
     )
+
+
+@pytest.mark.parametrize(
+    "scenario,code,otp_sent",
+    [
+        ("ip_failed", "proxy_check_failed", False),
+        ("ip_changed", "proxy_ip_changed", True),
+        ("bootstrap_timeout", "transport_error", False),
+    ],
+)
+def test_proxy_failure_stops_before_creation(make_manager, scenario, code, otp_sent):
+    manager, _, clients = make_manager(scenario)
+    task_id = manager.create(
+        [
+            account(
+                proxy="host.test:8000:user-session-12345:private-pass",
+                proxy_mode="dynamic",
+            )
+        ]
+    )[0]["id"]
+    result = wait_for(manager, task_id)
+    assert result["error_code"] == code and result["status"] == "failed"
+    paths = [call[1] for call in clients[0].s.inner.calls]
+    assert any("send-otp" in path for path in paths) is otp_sent
+    assert not any("register-completion" in path for path in paths)
+    assert not clients[0].completion_sent
+    assert "private" not in json.dumps(result)
+    if scenario == "bootstrap_timeout":
+        assert "未发送验证码" in result["message"]
+
+
+def test_proxy_sampling_can_be_disabled_and_same_ip_completes(make_manager):
+    manager, _, clients = make_manager()
+    task_id = manager.create(
+        [
+            account(
+                proxy="host.test:8000:user-session-12345:private-pass",
+                proxy_mode="dynamic",
+            )
+        ]
+    )[0]["id"]
+    result = wait_for(manager, task_id)
+    assert result["verified"] and result["exit_ip"] == "203.0.113.11"
+    assert clients[0].s.inner.ip_queries == 2
+    manager2, _, clients2 = make_manager("ip_failed")
+    task_id = manager2.create([account(proxy="host.test:8000", proxy_check=False)])[0][
+        "id"
+    ]
+    assert wait_for(manager2, task_id)["verified"]
+    assert clients2[0].s.inner.ip_queries == 0

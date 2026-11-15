@@ -49,7 +49,7 @@ python3 -m venv .venv
 
 - 单账号注册、最多 50 个邮箱的批量导入；批量共用表单中的姓名和生日。
 - 手动填写 OTP，或轮询独立邮箱 API；两种方式可在等待阶段并用。
-- 注册会话固定使用同一代理、Cookie jar 与 waterfall ID；支持 HTTP / HTTPS / SOCKS5 代理。
+- 注册会话复用同一代理配置、Cookie jar 与 waterfall ID；支持 HTTP / HTTPS / SOCKS5、动态 IP 与独立前置代理。
 - 可选邀请码兑换：会话验证后，先唤醒 VM 并初始化 sharing，再提交兑换。
 - 显示任务阶段、脱敏 HTTP 状态、候补状态及失败原因；支持停止、搜索和筛选。
 - 账号凭据加密落盘，支持单账号和全部账号的 JSON 导出。
@@ -61,9 +61,7 @@ python3 -m venv .venv
 每个邮箱提供一个专属接码 URL，GET 返回：
 
 ```json
-[
-  {"otp": "123456", "time": "2026-11-16T00:00:30Z"}
-]
+[{ "otp": "123456", "time": "2026-11-16T00:00:30Z" }]
 ```
 
 `time` 必须包含时区；程序只使用发送请求开始之后的最新 6 位验证码。同一时间出现不同验证码视为歧义，同一任务不会重复提交已使用的验证码。邮箱 API 走独立直连 Session，不附带 Muse Cookie，也不经过注册代理。
@@ -77,20 +75,45 @@ one@example.com----https://mail.example.com/otp/one
 two@example.com
 ```
 
-第二行将等待手动验证码。可另外粘贴代理池，每行一个完整 URL，按邮箱顺序循环分配。任何任务出现异常会停止本批尚未结束的任务，不补邮箱、不自动重复创建；已经发出的请求需等待返回。
+第二行将等待手动验证码。可另外粘贴代理池，每行一个 URL 或四段格式，按邮箱顺序循环分配，并统一应用代理模式与前置设置。任何任务出现异常会停止本批尚未结束的任务，不补邮箱、不自动重复创建；已经发出的请求需等待返回。
+
+### 动态 IP 与前置代理
+
+展开“连接与更多选项”，支持以下代理格式。凭据中的特殊字符使用 URL 格式时应 percent-encode：
+
+```text
+http://user:password@host:8000
+https://user:password@host:443
+socks5h://user:password@host:1080
+host:8000:username:password
+```
+
+**固定代理**保留原凭据；**动态 IP**为每个账号任务生成独立 session，同一任务从首页到会话激活复用同一份凭据。自动识别用户名或密码中的 `lsid` / `sessid` / `session` / `sid`，保留原 token 长度及纯数字格式，不修改国家和 TTL。也可以使用模板：
+
+```text
+host:8000:customer-country-us-session-{session}-lifetime-30:password
+```
+
+供应商必须支持 sticky session；程序不能把逐请求随机换 IP 的入口凭空固定。未识别 session 参数时会提示。与 RegFlow 一致，`gate.kookeey.info:1000`、`geo.iprocket.io:59999`、`prem.country.iprocket.io:9595` 归一为 SOCKS5。
+
+启用前置代理，例如 `http://127.0.0.1:7897`，连接顺序为：**本机 → 前置代理 → 注册代理 → Muse / Meta**。注册代理留空时只经过前置代理。前置支持 HTTP / HTTPS / SOCKS5；HTTPS 节点保留证书验证。邮箱 API 仍使用独立直连 Session；环境变量中的系统代理不会隐式参与这些请求。
+
+首次使用前置时，点击“安装代理链内核”。安装器从 [Mihomo 官方发行页](https://github.com/MetaCubeX/mihomo/releases/tag/v1.19.29) 下载固定 v1.19.29，并验证内置 SHA256；二进制仅保存在本项目 `data/bin/`。下载可以经过填写的前置代理，不经过注册代理。每任务启动独立内核，使用 [dialer-proxy](https://wiki.metacubex.one/en/config/proxies/dialer-proxy/) 连接两跳，只监听 localhost，随机端口和认证，结束时清理进程及临时配置。内核缺失、认证或连接失败均停止，不回退直连。
+
+“测试当前代理”只查询出口 IP 和 GET Muse 首页，不发送验证码或创建账号。批量池不会逐条测试。正式任务会重新生成自己的动态 session，因此测试出口可能与正式任务不同。默认在代理模式下，注册前与提交创建前通过 `api.ipify.org` 采样出口 IP；采样失败或不一致时不提交创建，可取消勾选此检查。两次相同只代表采样一致，不能保证全流程从未换 IP。
 
 ## 完成条件与中断
 
 流程为首页 → restart / CSRF → send-otp → confirm-otp → register-completion → Meta bootstrap → 动态 disclosure → accept-tos → Hatch 访问验证 → 可选邀请码。
 
-| 显示 | 含义 |
-| --- | --- |
-| 已创建 | register-completion 返回有效 `auth_meta_session` |
-| 会话已验证 | 动态披露已获 `success=true`；GET `/api/hatch/invite` 返回有效非失败 JSON，且存在 `hatch_sess` |
-| 已创建 · 待确认 | 已有账号，但后续引导、地区、条款、访问或邀请码步骤未完成 |
-| `region_waitlist` | 已创建但服务端判定地区候补，未证明已取得 Hatch 权限 |
-| `creation_uncertain` | 创建请求已发出但响应未知，或创建时服务重启；该邮箱禁止再次提交 |
-| 服务已中断 | 重启前的活动任务已中断，不会自动重新注册 |
+| 显示                 | 含义                                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| 已创建               | register-completion 返回有效 `auth_meta_session`                                              |
+| 会话已验证           | 动态披露已获 `success=true`；GET `/api/hatch/invite` 返回有效非失败 JSON，且存在 `hatch_sess` |
+| 已创建 · 待确认      | 已有账号，但后续引导、地区、条款、访问或邀请码步骤未完成                                      |
+| `region_waitlist`    | 已创建但服务端判定地区候补，未证明已取得 Hatch 权限                                           |
+| `creation_uncertain` | 创建请求已发出但响应未知，或创建时服务重启；该邮箱禁止再次提交                                |
+| 服务已中断           | 重启前的活动任务已中断，不会自动重新注册                                                      |
 
 邀请码返回 `invalid`、`used_up` 或 `already_redeemed` 会单独记录，已经验证的会话不会因此变成“未注册”。`accept-tos` 和账号创建均不自动重试。
 
@@ -104,6 +127,8 @@ two@example.com
 data/
   muse.sqlite3    任务、脱敏事件、加密的账号凭据
   secret.key     本地加密密钥
+  bin/           本项目安装的代理链内核
+  proxy-sessions/  活动任务的临时代理配置，任务结束清理
 ```
 
 历史状态重启后保留；HTTP Session 本身不恢复。结果包含 `registered`、`hatch_access_verified` 等独立标记；有 token 或 Cookie 不会单独把任务标记为验证成功。
@@ -136,6 +161,8 @@ npm run test:ui
 
 网页测试启动独立 fixture 服务 `127.0.0.1:8788`，使用临时数据库。所有注册和邮箱请求均为脚本化本地响应，不会实际发送邮件、创建账号或兑换邀请码。Playwright 只用于测试控制台，不参与注册引擎。
 
-已验证：24 项后端测试、3 项网页测试，以及桌面 / 手机布局。另做了一次只读真实首页 GET，得到 HTTP 200。**尚未使用新邮箱验证真实端到端注册成功**；本地测试不能替代服务端最终接受的证据。
+真实代理链测试需要先安装内核；没有内核时三项本地两跳测试会跳过，其他 fixture 测试照常运行。GitHub Actions 安装内核后验证 loopback 链路，不连接实际注册目标。
+
+已验证：64 项后端测试、4 项网页测试，以及展开代理配置后的桌面 / 手机布局。使用真实 Mihomo 和本地认证代理验证 HTTP → SOCKS5、SOCKS5 → HTTP、认证失败不直连及资源清理。另通过本机前置代理完成两次出口采样与只读 Muse 首页 HTTP 200。**尚未使用新邮箱验证真实端到端注册成功**；本地测试不能替代服务端最终接受的证据。
 
 开发检查点和 HAR 协议差异见 [docs/development.md](docs/development.md)。

@@ -91,3 +91,54 @@ command executed. The existing service was left running; a normal manual
 restart will load all final source edits. Do not claim that reload occurred.
 The repository includes isolated GitHub Actions tests; their result is checked
 separately from local verification.
+
+## Dynamic IP and front proxy update
+
+User asked to mirror RegFlow's dynamic IP adaptation and front proxy, following
+a screenshot showing a transport failure at HTTP session initialization.
+Screenshot alone does not establish the failing proxy/protocol or root cause.
+RegFlow files were read only; no integration, dependency or edits were added there.
+
+- `app/proxies.py`: URL / four-part normalization, known SOCKS entrypoints,
+  percent-encoded credentials and IPv6 URL support. Dynamic mode resolves
+  `{session}` or lsid/sessid/session/sid once per task, preserving token format,
+  country and TTL. Fixed mode preserves credentials.
+- `app/proxy_engine.py`: independent Mihomo v1.19.29 downloader with pinned
+  archive SHA256 for six platforms. Stored in this project's ignored data/bin.
+  Per-task chain uses TASK dialer-proxy FRONT, localhost random authenticated
+  listener and controller. HTTPS nodes keep TLS certificate verification.
+  Errors never fall back to DIRECT. Task close removes its process/config.
+- ProtocolClient owns one resolved route, curl Session and chain lifecycle.
+  All Muse/Meta calls share that route. Environment proxies are disabled.
+  OTP source keeps its own direct Session without Muse cookies.
+- New optional IP checks sample api.ipify.org before starting Muse and again
+  after OTP, before the completion stage. Failed or changed IP stops before
+  register-completion. Equal samples do not establish continuous IP stability.
+  No automatic rotation, retry, OTP resend or creation replay was added.
+- POST /api/proxy/test only queries IP twice and GETs Muse homepage; no native
+  restart, OTP or creation. Dynamic probe and registration have distinct session
+  identities. POST /api/proxy/install downloads using optional front proxy.
+  Same-origin API guard applies to both. Health reports engine installation.
+- UI adds mode, front switch/URL, check switch, test/install and sanitized result.
+  Batch pool accepts raw format and shares mode/front options. Proxy credentials
+  are not saved in history, logs or browser storage. Init failures now explicitly
+  state no OTP or account creation; completion uncertainty behavior is retained.
+
+Verification checkpoint:
+
+- 64 backend tests and 4 Edge UI tests passed in the final rerun. Ruff lint,
+  JavaScript syntax and Git whitespace checks passed. Expanded desktop/mobile
+  proxy controls have no horizontal overflow. Numeric/non-IP responses fail closed.
+- Real downloaded Mihomo passed loopback HTTP -> SOCKS5, SOCKS5 -> HTTP and
+  authentication rejection tests. Order/authentication/resource cleanup and no
+  direct fallback were checked. These three tests skip when no engine installed;
+  CI now installs the pinned engine to run them on Linux as well.
+- Real read-only probe through local front http://127.0.0.1:7897 returned two
+  equal exit samples and Muse homepage HTTP 200, approximately 6.6 seconds.
+  No actual mailbox, OTP, account creation or invite submission was used.
+- Production 8787 process has NOT been restarted by this update. An earlier
+  stop/reload was rejected by automatic approval (`blocked by policy`). Do not
+  retry or work around that rejected process action. A normal user restart of
+  start.bat is needed to load the new backend. Isolated fixture service only
+  was launched for UI tests.
+- Implementation and final local validation complete; push is the remaining step.

@@ -48,6 +48,7 @@ class FixtureSession:
         self.cookies = SimpleNamespace(jar=CookieJar())
         self.closed = False
         self.otp_confirmed = False
+        self.ip_queries = 0
 
     def get(self, url, **kwargs):
         return self.request("GET", url, **kwargs)
@@ -59,6 +60,17 @@ class FixtureSession:
         parsed = urlsplit(url)
         path = parsed.path
         self.calls.append((method, url, kwargs))
+        if parsed.hostname == "api.ipify.org":
+            self.ip_queries += 1
+            if self.scenario == "ip_failed":
+                raise requests.exceptions.Timeout("private proxy credentials")
+            return Response(
+                payload={
+                    "ip": "203.0.113.12"
+                    if self.scenario == "ip_changed" and self.ip_queries > 1
+                    else "203.0.113.11"
+                }
+            )
         body = kwargs.get("data")
         payload = (
             json.loads(body)
@@ -186,6 +198,8 @@ class FixtureSession:
                 return Response(200, {"success": False, "reason": "invalid"})
             return Response(200, {"success": True, "redemptionStatus": "redeemed"})
         if path == "/" and method == "GET":
+            if self.scenario == "bootstrap_timeout":
+                raise requests.exceptions.Timeout("private proxy credentials")
             return Response(
                 text='<html><body>{"vmId":"12345678-1234-1234-1234-123456789abc"}</body></html>'
             )
@@ -215,7 +229,13 @@ class OtpSession:
 
 def client_factory(scenario="success", clients=None):
     def create(config, emit):
-        client = ProtocolClient(config, emit)
+        # No engine or external connection in scripted UI / registration tests.
+        client = ProtocolClient(
+            config.model_copy(update={"front_proxy_enabled": False}), emit
+        )
+        client.proxy_check = (
+            bool(config.proxy or config.front_proxy_enabled) and config.proxy_check
+        )
         client.s.close()
         client.s = ObservedSession(FixtureSession(scenario), emit)
         if clients is not None:

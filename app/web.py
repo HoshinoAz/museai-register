@@ -8,7 +8,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from .models import BatchInput, OtpInput
+from .models import BatchInput, OtpInput, ProxyInput
+from .proxy_engine import (
+    VERSION,
+    ProxyFailure,
+    engine_path,
+    install_engine,
+    probe_proxy,
+)
 from .service import TaskManager
 from .storage import Storage
 
@@ -88,7 +95,28 @@ def create_app(data_dir=None, manager_factory=None):
             "workers": manager(request).workers,
             "mode": "pure_http",
             "upstream_commit": "be34c5e4893e5d109a15ffe46b14b416f60e0abf",
+            "proxy_support": "dynamic_and_front",
+            "proxy_engine": {"installed": engine_path().is_file(), "version": VERSION},
         }
+
+    @application.post("/api/proxy/test")
+    def test_proxy(payload: ProxyInput):
+        try:
+            return probe_proxy(payload)
+        except ProxyFailure as error:
+            return JSONResponse(
+                {"detail": str(error), "code": error.code}, status_code=502
+            )
+
+    @application.post("/api/proxy/install")
+    def install_proxy(payload: ProxyInput):
+        try:
+            install_engine(payload.front_proxy if payload.front_proxy_enabled else "")
+            return {"installed": True, "version": VERSION}
+        except ProxyFailure as error:
+            return JSONResponse(
+                {"detail": str(error), "code": error.code}, status_code=502
+            )
 
     @application.get("/api/tasks")
     def list_tasks(request: Request):

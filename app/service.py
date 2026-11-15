@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from curl_cffi import requests
 
 from .protocol import MuseError, ProtocolClient, ProtocolFailure, select_otp
+from .proxy_engine import ProxyFailure
 
 TERMINAL = {"succeeded", "partial", "failed", "cancelled", "interrupted"}
 
@@ -94,6 +95,13 @@ class TaskManager:
                     "invite_status": "not_requested",
                     "own_invite": None,
                     "error_code": None,
+                    "proxy_mode": config.proxy_mode,
+                    "proxy_route": "front_proxy"
+                    if config.front_proxy_enabled
+                    else "proxy"
+                    if config.proxy
+                    else "direct",
+                    "exit_ip": None,
                     "created_at": now(),
                     "updated_at": now(),
                     "events": [],
@@ -282,11 +290,17 @@ class TaskManager:
         client = otp_session = None
         meta = None
         try:
-            self._stage(task, "bootstrap", "初始化独立 HTTP 会话")
+            self._stage(task, "proxy", "准备独立 HTTP 会话与代理链路")
             client = self.client_factory(
                 task.config,
                 lambda message, kind="info": self._emit(task, message, kind),
             )
+            if client.proxy_check:
+                self._stage(task, "proxy", "检查注册代理出口 IP")
+                address = client.check_proxy()
+                self._update(task, exit_ip=address)
+                self._emit(task, f"注册前出口 IP：{address}")
+            self._stage(task, "bootstrap", "初始化 Muse 首页与 CSRF")
             response = client.open_home()
             if response.status_code != 200:
                 raise ProtocolFailure(
@@ -308,6 +322,7 @@ class TaskManager:
                 )
             if task.config.otp_url:
                 otp_session = self.otp_session_factory()
+                otp_session.trust_env = False
             deadline = time.monotonic() + task.config.otp_timeout
             seen = set()
             for attempt in range(3):
@@ -336,6 +351,10 @@ class TaskManager:
                 raise ProtocolFailure(
                     "unexpected_otp_state", "验证码响应未进入资料完善阶段，已停止"
                 )
+            if client.proxy_check:
+                self._stage(task, "proxy_check", "提交创建前复核出口 IP")
+                address = client.check_proxy()
+                self._emit(task, f"创建前出口 IP：{address}，与注册前采样一致")
             self._stage(task, "completion", "提交姓名、生日与动态条款版本（仅一次）")
             data = client.register_completion(
                 task.config.date_of_birth.isoformat(),
@@ -386,7 +405,7 @@ class TaskManager:
             )
             self._emit(task, task.public["message"], "warning")
         except Exception as error:
-            if isinstance(error, ProtocolFailure):
+            if isinstance(error, (ProtocolFailure, ProxyFailure)):
                 code, message = error.code, str(error)
             elif isinstance(error, MuseError):
                 code = getattr(getattr(client, "s", None), "last_error", None)
@@ -409,6 +428,11 @@ class TaskManager:
                     if code == "transport_error"
                     else "响应未能按预期解析，已保留现有结果并停止"
                 )
+                if code == "transport_error" and task.public["stage"] in {
+                    "proxy",
+                    "bootstrap",
+                }:
+                    message = "初始化网络连接失败；未发送验证码、未提交账号创建。请先测试代理协议与前置链路"
             if (
                 task.public["stage"] == "completion"
                 and getattr(client, "completion_sent", False)

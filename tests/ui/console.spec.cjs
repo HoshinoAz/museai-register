@@ -77,6 +77,9 @@ test("desktop and mobile layouts have no horizontal overflow", async ({
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.goto("/");
   await expect(page.locator("h1")).toBeVisible();
+  await page.locator(".advanced summary").click();
+  await page.locator("#proxy-mode").selectOption("dynamic");
+  await page.locator("#front-proxy-enabled").check();
   await page.screenshot({
     path: "artifacts/muse-desktop.png",
     fullPage: true,
@@ -97,4 +100,60 @@ test("desktop and mobile layouts have no horizontal overflow", async ({
   await expect(page.locator("#guide")).toBeVisible();
   await page.locator("#guide-close").click();
   await expect(page.locator("#guide")).not.toBeVisible();
+});
+
+test("dynamic and front proxy controls submit independently", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator(".advanced summary").click();
+  await page.locator("#proxy-mode").selectOption("dynamic");
+  await expect(page.locator("#dynamic-hint")).toBeVisible();
+  await page
+    .locator("#proxy")
+    .fill("host.test:8000:user-session-{session}:private-password");
+  await page.locator("#front-proxy-enabled").check();
+  await page.locator("#front-proxy").fill("http://127.0.0.1:7897");
+  let testPayload;
+  await page.route("**/api/proxy/test", async (route) => {
+    testPayload = route.request().postDataJSON();
+    await route.fulfill({
+      json: {
+        connected: true,
+        exit_ip: "203.0.113.11",
+        route: "前置 → 注册代理",
+        elapsed_ms: 50,
+        message: "两次出口采样一致",
+      },
+    });
+  });
+  await page.locator("#test-proxy").click();
+  await expect(page.locator("#proxy-result")).toContainText("203.0.113.11");
+  expect(testPayload.proxy_mode).toBe("dynamic");
+  expect(testPayload.front_proxy_enabled).toBe(true);
+  expect(testPayload.front_proxy).toBe("http://127.0.0.1:7897");
+  expect(testPayload.proxy_check).toBe(true);
+  await page.locator("#email").fill("proxy-ui@example.test");
+  await fillProfile(page);
+  const submitted = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/api/tasks") && request.method() === "POST",
+  );
+  await page.locator("#submit-register").click();
+  expect((await submitted).postDataJSON().accounts[0]).toMatchObject(
+    testPayload,
+  );
+  await expect(page.locator("#otp-panel")).toBeVisible();
+  await page.waitForTimeout(1900);
+  await expect(page.locator("#front-proxy")).toHaveValue(
+    "http://127.0.0.1:7897",
+  );
+  await page.locator("#manual-otp").fill("123456");
+  await page.locator("#submit-otp").click();
+  await expect(page.locator("#task-note")).toContainText("203.0.113.11");
+  await expect(page.locator("#event-list")).not.toContainText(
+    "private-password",
+  );
+  await page.locator("#front-proxy-enabled").uncheck();
+  await expect(page.locator("#front-proxy")).toBeDisabled();
 });

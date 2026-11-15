@@ -579,6 +579,33 @@ h2 {
 .advanced-content {
   padding: 4px 0 0;
 }
+.proxy-explanation {
+  margin: -6px 0 16px;
+}
+.proxy-toggle {
+  margin-bottom: 12px;
+}
+.proxy-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 15px;
+  margin: 16px 0;
+}
+.proxy-tools .help {
+  margin: 0;
+}
+.proxy-result {
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #f1f3e9;
+  overflow-wrap: anywhere;
+  margin-bottom: 18px;
+}
+.proxy-result.error {
+  color: #ab744f;
+}
 .consent {
   display: flex;
   align-items: flex-start;

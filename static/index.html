@@ -203,29 +203,91 @@
               >
             </div>
             <details class="advanced">
-              <summary>连接与更多选项<span>代理 · 邀请码 · 超时</span></summary>
+              <summary>
+                连接与更多选项<span>动态 IP · 前置代理 · 邀请码</span>
+              </summary>
               <div class="advanced-content">
                 <label class="field"
-                  >注册代理 URL<input
+                  >注册代理模式<select id="proxy-mode">
+                    <option value="fixed">固定代理 / 原样使用凭据</option>
+                    <option value="dynamic">
+                      动态 IP / 每任务独立 session
+                    </option>
+                  </select></label
+                >
+                <label class="field"
+                  >注册代理<input
                     id="proxy"
                     type="password"
                     autocomplete="off"
                     placeholder="http://user:pass@host:port"
                     maxlength="2048"
                   /><span class="help"
-                    >留空使用直连；同一账号全程使用同一代理，邮箱 API
-                    独立直连。</span
+                    >支持完整 URL 或
+                    host:port:username:password。留空且未启用前置时直连；邮箱
+                    API 独立直连。</span
                   ></label
                 >
+                <p class="help proxy-explanation" id="dynamic-hint" hidden>
+                  自动替换 lsid / sessid / session /
+                  sid，或在代理用户名、密码中使用
+                  {session}。同任务复用、不同任务隔离；保留国家与 TTL
+                  参数。供应商须支持 sticky session。
+                </p>
+                <label class="consent proxy-toggle"
+                  ><input id="front-proxy-enabled" type="checkbox" /><span
+                    >启用前置代理</span
+                  ></label
+                >
+                <label class="field" id="front-proxy-field" hidden
+                  >前置代理<input
+                    id="front-proxy"
+                    type="password"
+                    autocomplete="off"
+                    placeholder="http://127.0.0.1:7897"
+                    maxlength="2048"
+                    disabled
+                  /><span class="help"
+                    >本机 → 前置代理 → 注册代理 →
+                    Muse。注册代理留空时只经过前置代理。</span
+                  ></label
+                >
+                <label class="consent proxy-toggle"
+                  ><input id="proxy-check" type="checkbox" checked /><span
+                    >注册前与创建前检查出口 IP，变化时停止创建</span
+                  ></label
+                >
+                <div class="proxy-tools">
+                  <button
+                    class="secondary-button"
+                    id="test-proxy"
+                    type="button"
+                  >
+                    测试当前代理
+                  </button>
+                  <button class="text-button" id="install-proxy" type="button">
+                    安装代理链内核
+                  </button>
+                  <span class="help" id="proxy-engine-state"
+                    >前置代理需要独立 Mihomo 内核</span
+                  >
+                </div>
+                <p
+                  class="proxy-result help"
+                  id="proxy-result"
+                  role="status"
+                  aria-live="polite"
+                  hidden
+                ></p>
                 <label class="field" id="proxy-pool-field" hidden
                   >批量代理池<textarea
                     id="proxy-pool"
                     rows="3"
-                    placeholder="每行一个完整代理 URL；留空沿用上方代理"
+                    placeholder="每行一个 URL 或 host:port:username:password；留空沿用上方代理"
                     spellcheck="false"
                   ></textarea
                   ><span class="help"
-                    >按邮箱顺序分配，代理不会在账号流程中切换。</span
+                    >按邮箱顺序分配，统一应用代理模式与前置代理；连接测试只测试上方单个代理。</span
                   ></label
                 >
                 <div class="field-row">

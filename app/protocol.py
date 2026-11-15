@@ -5,6 +5,8 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .proxy_engine import ProxyFailure, ProxyRoute, exit_ip
+
 UPSTREAM = Path(__file__).resolve().parents[1] / "vendor" / "muse-protocol"
 if not (UPSTREAM / "musepy" / "client.py").is_file():
     raise RuntimeError("缺少协议依赖，请先运行 git submodule update --init --recursive")
@@ -67,15 +69,38 @@ class ProtocolClient(MuseClient):
     """Keep upstream wire behavior; add stable flow identity and explicit checks."""
 
     def __init__(self, config, emit):
-        super().__init__(
-            proxy=config.proxy or None,
-            impersonate="chrome142",
-            lang=config.language,
-            timeout=config.request_timeout,
-        )
+        self.route = ProxyRoute(config, uuid.uuid4().hex, emit)
+        try:
+            super().__init__(
+                proxy=self.route.url or None,
+                impersonate="chrome142",
+                lang=config.language,
+                timeout=config.request_timeout,
+            )
+            self.s.trust_env = False
+        except Exception:
+            self.route.close()
+            raise
+        self.proxy_check = self.route.enabled and config.proxy_check
+        self.exit_address = None
         self.waterfall_id = str(uuid.uuid4())
         self.s = ObservedSession(self.s, emit)
         self.completion_sent = False
+
+    def check_proxy(self):
+        address = exit_ip(self.s, timeout=self.timeout)
+        if self.exit_address is not None and address != self.exit_address:
+            raise ProxyFailure(
+                "proxy_ip_changed", "出口 IP 与注册前采样不一致，已停止；未提交账号创建"
+            )
+        self.exit_address = address
+        return address
+
+    def close(self):
+        try:
+            super().close()
+        finally:
+            self.route.close()
 
     def _h(self, base, extra=None):
         headers = super()._h(base, extra)

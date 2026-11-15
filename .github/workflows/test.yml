@@ -17,6 +17,8 @@ jobs:
           cache: npm
       - run: python -m venv .venv
       - run: .venv/bin/python -m pip install -r requirements-dev.txt
+      - name: Install pinned proxy engine for loopback chain tests
+        run: .venv/bin/python -c "from app.proxy_engine import install_engine; install_engine()"
       - run: .venv/bin/python -m pytest tests -q
       - run: .venv/bin/ruff check app tests run.py
       - run: node --check static/app.js

@@ -22,10 +22,12 @@ const flowSteps = [
 ];
 const stageIndex = {
   queued: -1,
+  proxy: 0,
   bootstrap: 0,
   send_otp: 1,
   otp: 1,
   confirm_otp: 1,
+  proxy_check: 2,
   completion: 2,
   activation: 3,
   disclosure: 3,
@@ -125,10 +127,10 @@ function updateMode(value) {
 
 function collectAccounts() {
   const common = {
+    ...collectProxy(),
     first_name: $("#first-name").value.trim(),
     last_name: $("#last-name").value.trim(),
     date_of_birth: $("#birthday").value,
-    proxy: $("#proxy").value.trim(),
     invite_code: $("#invite-code").value.trim(),
     language: $("#language").value,
     otp_timeout: Number($("#otp-timeout").value),
@@ -165,6 +167,50 @@ function collectAccounts() {
       proxy: proxies.length ? proxies[index % proxies.length] : common.proxy,
     };
   });
+}
+
+function collectProxy() {
+  return {
+    proxy: $("#proxy").value.trim(),
+    proxy_mode: $("#proxy-mode").value,
+    front_proxy_enabled: $("#front-proxy-enabled").checked,
+    front_proxy: $("#front-proxy-enabled").checked
+      ? $("#front-proxy").value.trim()
+      : "",
+    proxy_check: $("#proxy-check").checked,
+  };
+}
+
+async function proxyAction(action) {
+  const result = $("#proxy-result");
+  const testButton = $("#test-proxy");
+  const installButton = $("#install-proxy");
+  testButton.disabled = installButton.disabled = true;
+  result.hidden = false;
+  result.classList.remove("error");
+  result.textContent =
+    action === "install"
+      ? "正在下载并校验代理链内核…"
+      : "正在检查出口 IP 与 Muse 首页，测试不会发送验证码…";
+  try {
+    const data = await api(`/proxy/${action}`, {
+      method: "POST",
+      body: JSON.stringify(collectProxy()),
+      signal: AbortSignal.timeout(action === "install" ? 180000 : 85000),
+    });
+    if (action === "install") {
+      $("#proxy-engine-state").textContent = `Mihomo v${data.version} 已安装`;
+      result.textContent = "代理链内核已安装，可测试前置代理。";
+    } else {
+      result.classList.toggle("error", !data.connected);
+      result.textContent = `${data.message} · 出口 ${data.exit_ip} · ${data.route} · ${data.elapsed_ms} ms${data.warning ? `。${data.warning}` : ""}。采样不保证后续出口不变，正式任务会重新分配 session。`;
+    }
+  } catch (error) {
+    result.classList.add("error");
+    result.textContent = error.message;
+  } finally {
+    testButton.disabled = installButton.disabled = false;
+  }
 }
 
 async function submitRegistration(event) {
@@ -316,7 +362,11 @@ function renderDetail() {
       (task.invite_status !== "not_requested"
         ? ` · 邀请码：${task.invite_status}`
         : "") +
-      (task.own_invite ? ` · 自己的邀请码：${task.own_invite}` : "")
+      (task.own_invite ? ` · 自己的邀请码：${task.own_invite}` : "") +
+      (task.proxy_route && task.proxy_route !== "direct"
+        ? ` · ${task.proxy_mode === "dynamic" ? "动态 IP" : "固定代理"}${task.proxy_route === "front_proxy" ? " / 前置链路" : ""}`
+        : "") +
+      (task.exit_ip ? ` · 出口 IP：${task.exit_ip}` : "")
     : "任务开始后会实时显示服务端响应。";
   $("#task-note").classList.toggle("error", Boolean(task && attention(task)));
   $("#otp-hint").textContent =
@@ -409,6 +459,17 @@ async function exportTask(taskId) {
 }
 
 $("#register-form").addEventListener("submit", submitRegistration);
+$("#proxy-mode").addEventListener("change", () => {
+  $("#dynamic-hint").hidden = $("#proxy-mode").value !== "dynamic";
+});
+$("#front-proxy-enabled").addEventListener("change", () => {
+  const enabled = $("#front-proxy-enabled").checked;
+  $("#front-proxy-field").hidden = !enabled;
+  $("#front-proxy").disabled = !enabled;
+  $("#front-proxy").required = enabled;
+});
+$("#test-proxy").addEventListener("click", () => proxyAction("test"));
+$("#install-proxy").addEventListener("click", () => proxyAction("install"));
 for (const tab of document.querySelectorAll("[data-mode]"))
   tab.addEventListener("click", () => updateMode(tab.dataset.mode));
 $("#otp-mode").addEventListener("change", () => {
@@ -497,6 +558,9 @@ renderDetail();
 api("/health")
   .then((data) => {
     $("#worker-label").textContent = `纯 HTTP · ${data.workers} 个并发任务`;
+    $("#proxy-engine-state").textContent = data.proxy_engine?.installed
+      ? `Mihomo v${data.proxy_engine.version} 已安装`
+      : "前置代理需要安装独立 Mihomo 内核";
   })
   .catch(() => {});
 refresh();
