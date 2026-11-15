@@ -115,6 +115,7 @@ data/
 ```powershell
 .\setup.ps1 -Dev
 .\.venv\Scripts\python.exe -m pytest tests -q
+.\.venv\Scripts\ruff.exe check app tests run.py
 node --check static/app.js
 ```
 

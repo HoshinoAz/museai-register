@@ -65,7 +65,7 @@ does not replay historical cookies, OTP, account identity or disclosure text.
 - Three Playwright tests passed in installed Edge: manual OTP and polling input
   preservation, credential download, batch import/filtering and mobile layout.
 - Fixture UI server uses only temporary data and scripted HTTP, never real Muse.
-- Node syntax check, Python compilation and Git whitespace checks passed.
+- Node syntax check, Python compilation, Ruff lint and Git whitespace checks passed.
 - Read-only real Muse homepage GET via the local download proxy returned HTTP
   200 with HTML / Next Flight. No OTP, native restart, account creation or invite
   submission was performed in that check.
@@ -81,4 +81,13 @@ service is running at `http://127.0.0.1:8787` with one registration worker.
 is empty, confirming fixture data did not enter the production database.
 The page was opened in the Codex browser panel. Local keys, database, virtual
 environment, browser artifacts and logs are confirmed ignored by Git.
-Repository upload remains pending; update this section after verifying delivery.
+The initial implementation was pushed to `origin/main` as
+`9ed3a2a9dae7f20dd648cc514a59eda015604f0d`; `git ls-remote` confirmed the exact
+remote commit. The independent server's health check passed again.
+
+An attempted reload to pick up the final error-classification equality check
+was rejected by automatic execution approval (`blocked by policy`) before the
+command executed. The existing service was left running; a normal manual
+restart will load all final source edits. Do not claim that reload occurred.
+The repository includes isolated GitHub Actions tests; their result is checked
+separately from local verification.
