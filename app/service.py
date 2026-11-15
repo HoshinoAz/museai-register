@@ -112,6 +112,7 @@ class TaskManager:
                     else "direct",
                     "exit_ip": None,
                     "fingerprint": config._identity.public(),
+                    "protocol_diagnostics": [],
                     "created_at": now(),
                     "updated_at": now(),
                     "events": [],
@@ -467,12 +468,25 @@ class TaskManager:
             self._stop_batch(task)
         finally:
             if client:
-                if meta is not None:
+                try:
+                    if meta is not None:
+                        try:
+                            self._save_credentials(task, client, meta)
+                        except Exception:
+                            self._emit(
+                                task, "最终凭据保存失败，请检查本地磁盘", "error"
+                            )
                     try:
-                        self._save_credentials(task, client, meta)
+                        diagnostics = getattr(client.s, "protocol_diagnostics", None)
+                        if diagnostics is not None:
+                            self._update(
+                                task, protocol_diagnostics=copy.deepcopy(diagnostics)
+                            )
                     except Exception:
-                        self._emit(task, "最终凭据保存失败，请检查本地磁盘", "error")
-                client.close()
+                        # Diagnostic storage must not change outcomes or cleanup.
+                        pass
+                finally:
+                    client.close()
             if otp_session:
                 otp_session.close()
 

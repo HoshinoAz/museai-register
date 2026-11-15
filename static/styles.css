@@ -801,7 +801,7 @@ h2 {
   gap: 12px;
   margin-top: 13px;
 }
-.task-actions:has(> [hidden] + [hidden]) {
+.task-actions:not(:has(> :not([hidden]))) {
   display: none;
 }
 .text-button {

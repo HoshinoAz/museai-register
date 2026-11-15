@@ -5,6 +5,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from .diagnostics import request_snapshot, response_snapshot
 from .fingerprints import create_identity
 from .proxy_engine import ProxyFailure, ProxyRoute, exit_ip
 
@@ -38,6 +39,7 @@ class ObservedSession:
         self.emit = emit
         self.last_error = None
         self.identity = identity
+        self.protocol_diagnostics = []
 
     def __getattr__(self, name):
         return getattr(self.inner, name)
@@ -66,7 +68,19 @@ class ObservedSession:
                 default_headers=False,
                 accept_encoding="gzip, deflate, br, zstd",
             )
-        response = getattr(self.inner, method.lower())(url, **kwargs)
+        try:
+            snapshot = request_snapshot(self.inner, method, url, kwargs)
+        except Exception:
+            snapshot = None
+        try:
+            response = getattr(self.inner, method.lower())(url, **kwargs)
+        except Exception as error:
+            if snapshot is not None:
+                snapshot["transport_exception"] = type(error).__name__
+                self.protocol_diagnostics = (self.protocol_diagnostics + [snapshot])[
+                    -32:
+                ]
+            raise
         path = urlsplit(url).path or "/"
         self.emit(f"{method} {path} · HTTP {response.status_code}", "http")
         if response.status_code >= 400:
@@ -80,6 +94,14 @@ class ObservedSession:
                 and re.fullmatch(r"[a-zA-Z0-9_.:-]{1,80}", code)
                 else f"http_{response.status_code}"
             )
+        if snapshot is not None:
+            try:
+                snapshot.update(
+                    response_snapshot(self.inner, response, json_object(response))
+                )
+            except Exception:
+                snapshot["response_capture_failed"] = True
+            self.protocol_diagnostics = (self.protocol_diagnostics + [snapshot])[-32:]
         return response
 
     def get(self, url, **kwargs):

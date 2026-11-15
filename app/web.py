@@ -99,6 +99,7 @@ def create_app(data_dir=None, manager_factory=None):
             "proxy_support": "dynamic_and_front",
             "fingerprint_support": "per_account_v1",
             "default_browser": DEFAULT_BROWSER,
+            "diagnostic_support": "auth_metadata_v1",
             "proxy_engine": {"installed": engine_path().is_file(), "version": VERSION},
         }
 
@@ -150,6 +151,25 @@ def create_app(data_dir=None, manager_factory=None):
             return {"accepted": True}
         except ValueError as error:
             raise HTTPException(409, str(error)) from None
+
+    @application.get("/api/tasks/{task_id}/diagnostics")
+    def diagnostics(task_id: str, request: Request):
+        try:
+            public = manager(request).get(task_id)
+        except KeyError:
+            raise HTTPException(404, "任务不存在") from None
+        return {
+            "schema": 1,
+            "task_id": task_id,
+            "status": public["status"],
+            "stage": public["stage"],
+            "error_code": public.get("error_code"),
+            "fingerprint": public.get("fingerprint"),
+            "proxy_mode": public.get("proxy_mode"),
+            "proxy_route": public.get("proxy_route"),
+            "requests": public.get("protocol_diagnostics", []),
+            "cookie_observation": "jar_names_only_not_wire_capture",
+        }
 
     @application.post("/api/tasks/{task_id}/resend")
     def resend(task_id: str, request: Request):

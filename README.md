@@ -174,6 +174,8 @@ npm run test:ui
 
 真实代理链测试需要先安装内核；没有内核时三项本地两跳测试会跳过，其他 fixture 测试照常运行。GitHub Actions 安装内核后验证 loopback 链路，不连接实际注册目标。
 
-已验证：87 项后端测试、5 项网页测试，以及展开代理配置后的桌面 / 手机布局。使用真实 Mihomo 和本地认证代理验证 HTTP → SOCKS5、SOCKS5 → HTTP、认证失败不直连及资源清理。Chrome 152 Windows / macOS 经本地受信证书的 HTTPS 服务验证实际请求头；身份持久化、加密、覆盖保护和单次创建行为均有回归检查。另通过本机前置代理完成两次出口采样与只读 Muse 首页 HTTP 200。**尚未使用新邮箱验证真实端到端注册成功**；本地测试不能替代服务端最终接受的证据。
+已验证：102 项后端测试、5 项网页测试，以及展开代理配置后的桌面 / 手机布局。使用真实 Mihomo 和本地认证代理验证 HTTP → SOCKS5、SOCKS5 → HTTP、认证失败不直连及资源清理。Chrome 152 Windows / macOS 经本地受信证书的 HTTPS 服务验证实际请求头；身份持久化、加密、覆盖保护和单次创建行为均有回归检查。另通过本机前置代理完成两次出口采样与只读 Muse 首页 HTTP 200。**尚未使用新邮箱验证真实端到端注册成功**；本地测试不能替代服务端最终接受的证据。
 
-开发检查点和 HAR 协议差异见 [docs/development.md](docs/development.md)。
+任务结束后可点击“导出脱敏诊断”，查看原生注册请求的字段名、关键 Cookie 名是否存在、响应类型与服务端子码。诊断不包含邮箱、姓名、生日、验证码、Cookie 值或代理密码；Cookie 缓存中的名称不代表实际发送或已获服务端认可。旧任务无法补取当时未记录的信息。
+
+开发检查点和 HAR 协议差异见 [docs/development.md](docs/development.md)。`registrationBlocked` 排查证据及尚未确定的原因见 [docs/registration-blocked-investigation.md](docs/registration-blocked-investigation.md)。

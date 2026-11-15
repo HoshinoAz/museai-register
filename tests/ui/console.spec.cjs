@@ -45,6 +45,29 @@ test("manual OTP, persistent input, request log and credential download", async 
   await expect(page.locator("#fingerprint-summary")).toContainText(
     result.protocol_fingerprint.id.slice(0, 12),
   );
+  await expect(page.locator("#export-diagnostics")).toBeVisible();
+  const diagnosticDownloadPromise = page.waitForEvent("download");
+  await page.locator("#export-diagnostics").click();
+  const diagnosticDownload = await diagnosticDownloadPromise;
+  expect(diagnosticDownload.suggestedFilename()).toMatch(/^muse-diagnostics-.+\.json$/);
+  const diagnosticStream = await diagnosticDownload.createReadStream();
+  const diagnosticChunks = [];
+  for await (const chunk of diagnosticStream) diagnosticChunks.push(chunk);
+  const diagnosticText = Buffer.concat(diagnosticChunks).toString();
+  const diagnosticData = JSON.parse(diagnosticText);
+  expect(diagnosticData.requests).toHaveLength(4);
+  expect(diagnosticData.requests.at(-1).path).toContain("register-completion");
+  expect(diagnosticText).not.toContain("fixture-secret");
+  expect(diagnosticText).not.toContain("manual-ui@example.test");
+  await page.route("**/api/tasks", async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    for (const task of data.tasks) delete task.protocol_diagnostics;
+    await route.fulfill({ response, json: data });
+  });
+  await page.reload();
+  await expect(page.locator("#export-diagnostics")).toBeHidden();
+  await expect(page.locator("#export-task")).toBeVisible();
   expect(errors).toEqual([]);
 });
 

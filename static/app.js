@@ -344,6 +344,7 @@ function renderDetail() {
   $("#otp-panel").hidden = !task || task.status !== "waiting_otp";
   $("#cancel-task").hidden = !task || !activeStatuses.has(task.status);
   $("#export-task").hidden = !task || !task.has_credentials;
+  $("#export-diagnostics").hidden = !task?.protocol_diagnostics?.length;
   $("#progress-badge").textContent = task
     ? stateNames[task.status] || task.status
     : "就绪";
@@ -465,6 +466,16 @@ async function exportTask(taskId) {
   }
 }
 
+async function exportDiagnostics(taskId) {
+  try {
+    const data = await api(`/tasks/${taskId}/diagnostics`);
+    downloadJson(data, `muse-diagnostics-${taskId.slice(0, 12)}.json`);
+    notify("脱敏诊断已导出");
+  } catch (error) {
+    notify(error.message, true);
+  }
+}
+
 $("#register-form").addEventListener("submit", submitRegistration);
 $("#proxy-mode").addEventListener("change", () => {
   $("#dynamic-hint").hidden = $("#proxy-mode").value !== "dynamic";
@@ -503,6 +514,7 @@ $("#cancel-task").addEventListener("click", () =>
   taskAction("cancel", $("#cancel-task")),
 );
 $("#export-task").addEventListener("click", () => exportTask(selectedId));
+$("#export-diagnostics").addEventListener("click", () => exportDiagnostics(selectedId));
 $("#search").addEventListener("input", renderRows);
 $("#status-filter").addEventListener("change", renderRows);
 $("#refresh").addEventListener("click", () => refresh(true));

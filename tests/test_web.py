@@ -72,6 +72,50 @@ def test_validation_never_reflects_proxy_credentials(tmp_path):
         )
 
 
+def test_failed_task_diagnostics_are_persisted_and_export_without_credentials(tmp_path):
+    def app_for_diagnostics():
+        return create_app(
+            tmp_path,
+            lambda store: TaskManager(
+                store,
+                client_factory=client_factory("blocked"),
+                otp_session_factory=OtpSession,
+            ),
+        )
+
+    app = app_for_diagnostics()
+    with TestClient(app, headers={"X-Muse-Client": "1"}) as client:
+        task_id = client.post(
+            "/api/tasks", json={"accounts": [account().model_dump(mode="json")]}
+        ).json()["tasks"][0]["id"]
+        wait_for(
+            app.state.manager, task_id, lambda task: bool(task["protocol_diagnostics"])
+        )
+        assert (
+            client.get("/api/health").json()["diagnostic_support"] == "auth_metadata_v1"
+        )
+        exported = client.get(f"/api/tasks/{task_id}/diagnostics")
+        data = exported.json()
+        assert data["requests"][-1]["http_status"] == 403
+        assert data["requests"][-1]["error_type"] == "registrationBlocked"
+        assert len(data["requests"]) == 4
+        assert (
+            sum(x["path"].endswith("register-completion") for x in data["requests"])
+            == 1
+        )
+        assert (
+            "fixture@example.test" not in exported.text
+            and "fixture-csrf" not in exported.text
+        )
+        assert (
+            "never-log" not in exported.text and "fixture-secret" not in exported.text
+        )
+        assert exported.headers["cache-control"] == "no-store"
+        assert client.get("/api/tasks/unknown/diagnostics").status_code == 404
+    with TestClient(app_for_diagnostics(), headers={"X-Muse-Client": "1"}) as client:
+        assert client.get(f"/api/tasks/{task_id}/diagnostics").json() == data
+
+
 def test_restart_preserves_public_history_and_credentials(tmp_path):
     app = app_for_test(tmp_path)
     with TestClient(app, headers={"X-Muse-Client": "1"}) as client:

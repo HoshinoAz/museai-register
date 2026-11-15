@@ -230,3 +230,38 @@ Verification checkpoint:
   GitHub Actions run `43742294323` completed successfully for that commit:
   https://github.com/HoshinoAz/museai-register/actions/runs/43742294323
   This follow-up changes only the delivery checkpoint; runtime remains unchanged.
+
+## Registration-blocked investigation
+
+The operator first answered that browser registration also failed, then corrected
+this to success and confirmed the same mailbox and exit IP. Use the corrected
+comparison. Current production health now reports per_account_v1 and Chrome 152;
+the user has loaded that implementation. The latest task confirms Chrome 152,
+OTP 200 and exactly one completion 403. Do not blame an unrestarted Chrome 142.
+
+Investigation details and primary-asset evidence are recorded in
+`docs/registration-blocked-investigation.md`. The cause is not yet isolated.
+The local identity seed/UUID is not a remote device token; cookies are fresh per
+task. Older successful HAR has pre-existing cookies and CAA/Falco/AYMH traffic.
+Live homepage GET sets datr without JS. The served native request builder does
+not attach a standalone Canvas/WebGL token. None of these observations proves
+which server rule refused the closed task.
+
+Added observation-only native request metadata, persistence and a sanitized
+diagnostic export button/API. Numeric onboarding_failure_code and cookie jar
+names were previously discarded. No actual registration request, OTP send,
+collector, new cookie, retry or creation replay was added or performed. Existing
+data and pinned upstream are preserved. The running production service has not
+been restarted during this investigation; it needs a normal user restart to load
+diagnostic_support=auth_metadata_v1. Historical failures cannot be reconstructed.
+
+Verification complete locally: 102 backend tests and all five Edge UI tests
+passed, including sanitized diagnostic persistence/download, legacy-task exports,
+observer/storage failure parity, bounded transport snapshots and no duplicate
+completion. Ruff, Node syntax and Git whitespace checks passed.
+
+Two earlier backend runs exposed intermittent loopback proxy-chain 502 responses;
+an engine-log rerun passed all three chain cases and the final full run passed.
+The transient failure's cause was not isolated. This is a fixture/loopback
+observation, not evidence that production registrationBlocked came from the
+proxy. No proxy implementation or integration-test behavior was changed.
